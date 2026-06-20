@@ -70,5 +70,34 @@
       "urlFilter": "||akamaized.net/",
       "resourceTypes": ["media", "xmlhttprequest", "other"]
     }
+  },
+  {
+    "id": 6,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "content-security-policy", "operation": "remove" },
+        { "header": "content-security-policy-report-only", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||traxsource.com/",
+      "resourceTypes": ["main_frame", "sub_frame"]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "access-control-allow-origin", "operation": "set", "value": "*" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||traxsource.com/",
+      "resourceTypes": ["media", "xmlhttprequest", "other"]
+    }
   }
 ]

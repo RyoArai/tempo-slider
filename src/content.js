@@ -6,8 +6,16 @@
 
   const ext = (typeof browser !== 'undefined') ? browser : chrome;
 
-  // サイト種別判定 (Beatport は Web Audio 直接再生のため別経路で制御)
-  const SITE = location.hostname.endsWith('beatport.com') ? 'beatport' : 'bandcamp';
+  // サイト種別判定
+  //   bandcamp: HTML <audio> 要素経由
+  //   beatport / traxsource: Web Audio 直接再生（page-inject.js 経由で制御）
+  const SITE = (() => {
+    const h = location.hostname;
+    if (h.endsWith('beatport.com')) return 'beatport';
+    if (h.endsWith('traxsource.com')) return 'traxsource';
+    return 'bandcamp';
+  })();
+  const USES_PAGE_INJECT = (SITE === 'beatport' || SITE === 'traxsource');
   const MSG_TAG = '__tempoSlider';
 
   function postToPage(type, payload) {
@@ -177,8 +185,8 @@
       // Rubber Band の pitch を audio.playbackRate の逆数に設定してピッチを元に戻す
       state.workletNode.port.postMessage(JSON.stringify(['pitch', 1 / state.tempoRatio]));
     }
-    // Beatport: ページの Web Audio に直接 playbackRate を適用
-    if (SITE === 'beatport') {
+    // Beatport / Traxsource: ページの Web Audio に直接 playbackRate を適用
+    if (USES_PAGE_INJECT) {
       postToPage('setRate', { rate: state.tempoRatio });
     }
     updateTempoDisplay();
@@ -190,8 +198,8 @@
 
   async function setMasterTempo(on) {
     if (on === state.masterTempo) return true;
-    // Beatport: page-inject 側で AudioContext + Rubber Band グラフを構築
-    if (SITE === 'beatport') {
+    // Beatport / Traxsource: page-inject 側で AudioContext + Rubber Band グラフを構築
+    if (USES_PAGE_INJECT) {
       return new Promise((resolve) => {
         const handler = (e) => {
           if (e.source !== window || !e.data || e.data[MSG_TAG] !== true) return;
@@ -665,11 +673,11 @@
     });
 
     detectBtn.addEventListener('click', async () => {
-      // Beatport: ページから BPM を再取得
-      if (SITE === 'beatport') {
+      // Beatport / Traxsource: ページから BPM を再取得
+      if (USES_PAGE_INJECT) {
         statusEl.textContent = 'Extracting BPM from page...';
-        lastBeatportBpm = null; // 強制再取得
-        const bpm = extractBeatportBpm();
+        lastExtractedBpm = null;
+        const bpm = extractPageBpm();
         if (bpm) {
           setOriginalBpm(bpm);
           statusEl.textContent = `Extracted: ${bpm} BPM`;
@@ -763,19 +771,25 @@
   });
 
   // ============================================================
-  // Beatport BPM 自動取得
   // ============================================================
-  function extractBeatportBpm() {
-    if (SITE !== 'beatport') return null;
-    // 1) Beatport プレイヤーの BPM 表示要素を直接狙う
-    //    例: <p class="Player-style__BPMInfo-sc-..."" >125 bpm</p>
-    const els = document.querySelectorAll('[class*="BPMInfo"]');
-    for (const el of els) {
-      const m = (el.textContent || '').match(/(\d{2,3}(?:\.\d+)?)/);
-      if (m) {
-        const bpm = parseFloat(m[1]);
-        if (bpm >= 50 && bpm <= 220) return Math.round(bpm);
-      }
+  // ページから BPM を自動取得（Beatport / Traxsource 等の専用クラスや一般的テキストから）
+  function extractPageBpm() {
+    if (!USES_PAGE_INJECT) return null;
+    // 1) サイト固有のクラス指定（観測した DOM パターン）
+    //    Beatport: <p class="Player-style__BPMInfo-...">125 bpm</p>
+    //    Traxsource は未確認だが "bpm" を含むクラスを使うことが多い
+    const classSelectors = ['[class*="BPMInfo"]', '[class*="bpm" i]'];
+    for (const sel of classSelectors) {
+      try {
+        const els = document.querySelectorAll(sel);
+        for (const el of els) {
+          const m = (el.textContent || '').match(/(\d{2,3}(?:\.\d+)?)/);
+          if (m) {
+            const bpm = parseFloat(m[1]);
+            if (bpm >= 50 && bpm <= 220) return Math.round(bpm);
+          }
+        }
+      } catch (e) {}
     }
     // 2) フォールバック: ページテキスト全体から
     const bodyText = document.body.innerText || '';
@@ -793,16 +807,16 @@
     return null;
   }
 
-  let lastBeatportBpm = null;
-  function maybeExtractBeatportBpm() {
-    const bpm = extractBeatportBpm();
-    if (bpm && bpm !== lastBeatportBpm) {
-      lastBeatportBpm = bpm;
+  let lastExtractedBpm = null;
+  function maybeExtractPageBpm() {
+    const bpm = extractPageBpm();
+    if (bpm && bpm !== lastExtractedBpm) {
+      lastExtractedBpm = bpm;
       setOriginalBpm(bpm);
     }
   }
 
-  function setupBeatportIntegration() {
+  function setupPageInjectIntegration() {
     // page-inject に worklet URL を渡す（MASTER TEMPO に必要）
     postToPage('init', { workletUrl: ext.runtime.getURL('rubberband-worklet.js') });
 
@@ -810,14 +824,14 @@
     let extractTimer = null;
     function schedule() {
       if (extractTimer) clearTimeout(extractTimer);
-      extractTimer = setTimeout(maybeExtractBeatportBpm, 400);
+      extractTimer = setTimeout(maybeExtractPageBpm, 400);
     }
     setTimeout(schedule, 1000);
     let lastUrl = location.href;
     const observer = new MutationObserver(() => {
       if (location.href !== lastUrl) {
         lastUrl = location.href;
-        lastBeatportBpm = null;
+        lastExtractedBpm = null;
       }
       schedule();
     });
@@ -827,7 +841,7 @@
   // 起動
   injectPanel();
   watchAudioChanges();
-  if (SITE === 'beatport') setupBeatportIntegration();
+  if (USES_PAGE_INJECT) setupPageInjectIntegration();
 
   document.addEventListener('click', () => {
     if (state.audioCtx && state.audioCtx.state === 'suspended') {

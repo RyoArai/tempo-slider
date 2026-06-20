@@ -502,21 +502,14 @@
     function savePosition() {
       const rect = panel.getBoundingClientRect();
       const payload = { top: rect.top, left: rect.left };
-      // Promise / Callback どちらでも動くように try-catch でラップ
       try {
         const ret = ext.storage.local.set({ [STORAGE_KEY]: payload });
-        if (ret && typeof ret.catch === 'function') {
-          ret.catch(e => console.warn('[TEMPO Slider] save error:', e));
-        }
-        console.log('[TEMPO Slider] saved position', payload);
-      } catch (e) {
-        console.warn('[TEMPO Slider] save sync error:', e);
-      }
+        if (ret && typeof ret.catch === 'function') ret.catch(() => {});
+      } catch (e) {}
     }
 
-    // 保存された位置を復元
+    // 保存された位置を復元（Promise / Callback 両対応）
     const onRestore = (result) => {
-      console.log('[TEMPO Slider] storage.get result:', result);
       const pos = result && result[STORAGE_KEY];
       if (pos && typeof pos.top === 'number' && typeof pos.left === 'number') {
         applyPosition(pos.top, pos.left);
@@ -524,13 +517,10 @@
     };
     try {
       const ret = ext.storage.local.get(STORAGE_KEY, onRestore);
-      // Promise API の場合（コールバック未指定でも Promise を返す Chrome MV3 ）
       if (ret && typeof ret.then === 'function') {
-        ret.then(onRestore).catch(e => console.warn('[TEMPO Slider] restore error:', e));
+        ret.then(onRestore).catch(() => {});
       }
-    } catch (e) {
-      console.warn('[TEMPO Slider] restore sync error:', e);
-    }
+    } catch (e) {}
 
     let dragging = false;
     let startX = 0, startY = 0, initialTop = 0, initialLeft = 0;

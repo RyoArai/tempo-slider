@@ -190,6 +190,25 @@
 
   async function setMasterTempo(on) {
     if (on === state.masterTempo) return true;
+    // Beatport: page-inject 側で AudioContext + Rubber Band グラフを構築
+    if (SITE === 'beatport') {
+      return new Promise((resolve) => {
+        const handler = (e) => {
+          if (e.source !== window || !e.data || e.data[MSG_TAG] !== true) return;
+          if (e.data.type === 'masterTempoResult') {
+            window.removeEventListener('message', handler);
+            if (e.data.ok) {
+              state.masterTempo = on;
+              applyTempo();
+            }
+            resolve(!!e.data.ok);
+          }
+        };
+        window.addEventListener('message', handler);
+        postToPage('setMasterTempo', { on });
+      });
+    }
+    // BandCamp (audio 要素経由)
     if (on) {
       const ok = await ensureGraph();
       if (!ok) return false;
@@ -728,9 +747,51 @@
     if (handled) e.preventDefault();
   });
 
+  // ============================================================
+  // Beatport BPM 自動取得
+  // ============================================================
+  function extractBeatportBpm() {
+    if (SITE !== 'beatport') return null;
+    // テキストベース検索: "BPM 128" や "BPM: 128" のパターン
+    const bodyText = document.body.innerText || '';
+    const m = bodyText.match(/BPM\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)/i);
+    if (m) {
+      const bpm = parseFloat(m[1]);
+      if (bpm >= 50 && bpm <= 220) return Math.round(bpm);
+    }
+    return null;
+  }
+
+  let lastBeatportBpm = null;
+  function maybeExtractBeatportBpm() {
+    const bpm = extractBeatportBpm();
+    if (bpm && bpm !== lastBeatportBpm) {
+      lastBeatportBpm = bpm;
+      setOriginalBpm(bpm);
+    }
+  }
+
+  function setupBeatportIntegration() {
+    // page-inject に worklet URL を渡す（MASTER TEMPO に必要）
+    postToPage('init', { workletUrl: ext.runtime.getURL('rubberband-worklet.js') });
+
+    // BPM 自動取得: 初回 + URL 変化時 + DOM 変化時
+    setTimeout(maybeExtractBeatportBpm, 1500);
+    let lastUrl = location.href;
+    const observer = new MutationObserver(() => {
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        lastBeatportBpm = null; // ページ変わったらリセット
+        setTimeout(maybeExtractBeatportBpm, 800);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
   // 起動
   injectPanel();
   watchAudioChanges();
+  if (SITE === 'beatport') setupBeatportIntegration();
 
   document.addEventListener('click', () => {
     if (state.audioCtx && state.audioCtx.state === 'suspended') {

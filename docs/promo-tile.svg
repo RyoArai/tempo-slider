@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 280" width="440" height="280">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a1d"/>
+      <stop offset="100%" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <linearGradient id="iconBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22222a"/>
+      <stop offset="100%" stop-color="#0f0f15"/>
+    </linearGradient>
+    <linearGradient id="thumbGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a0a0a8"/>
+      <stop offset="100%" stop-color="#3e3e44"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="440" height="280" fill="url(#bg)"/>
+
+  <!-- 左: アイコン (フェーダー風) -->
+  <g transform="translate(40, 50)">
+    <rect width="180" height="180" rx="28" fill="url(#iconBg)" stroke="rgba(255,255,255,0.12)"/>
+    <!-- 目盛り -->
+    <g fill="rgba(255,255,255,0.35)" transform="translate(0, 0)">
+      <rect x="54" y="22" width="72" height="2"/>
+      <rect x="54" y="38" width="72" height="2"/>
+      <rect x="54" y="54" width="72" height="2"/>
+      <rect x="54" y="70" width="72" height="2"/>
+      <rect x="54" y="86" width="72" height="2"/>
+      <rect x="54" y="102" width="72" height="2"/>
+      <rect x="54" y="118" width="72" height="2"/>
+      <rect x="54" y="134" width="72" height="2"/>
+      <rect x="54" y="150" width="72" height="2"/>
+    </g>
+    <!-- 緑LED -->
+    <rect x="48" y="86" width="8" height="6" rx="1" fill="#50ff80"/>
+    <!-- レール -->
+    <rect x="86" y="22" width="8" height="136" rx="4" fill="rgba(255,255,255,0.18)"/>
+    <!-- Thumb -->
+    <rect x="64" y="108" width="52" height="14" rx="3" fill="url(#thumbGrad)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+    <rect x="70" y="114" width="40" height="2" fill="rgba(0,0,0,0.4)"/>
+  </g>
+
+  <!-- 右: テキスト -->
+  <g transform="translate(244, 100)">
+    <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="32" font-weight="700" fill="#ffffff" letter-spacing="0.5">TEMPO</text>
+    <text x="0" y="38" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="32" font-weight="700" fill="#ffffff" letter-spacing="0.5">Slider</text>
+    <text x="0" y="78" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" fill="#a0a0a8">CDJ-style tempo controls</text>
+    <text x="0" y="96" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" fill="#a0a0a8">for DJ music purchase sites</text>
+  </g>
+</svg>

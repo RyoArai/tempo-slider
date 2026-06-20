@@ -406,7 +406,18 @@
   cursor: wait;
 }
 
-/* ステータス（Current BPM の下） */
+/* ショートカット表示（BPM ブロックの下、上ボーダーで区切る） */
+#tempo-slider-panel .tempo-slider__shortcuts {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: left;
+  line-height: 1.6;
+}
+
+/* ステータス（ショートカットの下、メッセージがある時だけ表示） */
 #tempo-slider-panel .tempo-slider__status {
   min-height: 14px;
   margin-top: 4px;
@@ -416,17 +427,6 @@
 }
 #tempo-slider-panel .tempo-slider__status:empty {
   display: none;
-}
-
-/* ショートカット表示（ステータスの下） */
-#tempo-slider-panel .tempo-slider__shortcuts {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-  text-align: left;
-  line-height: 1.6;
 }
 #tempo-slider-panel .tempo-slider__shortcuts kbd {
   display: inline-block;

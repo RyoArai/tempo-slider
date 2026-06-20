@@ -451,11 +451,11 @@
                 <span class="tempo-slider__unit">BPM</span>
               </div>
             </div>
-            <div class="tempo-slider__status"></div>
             <div class="tempo-slider__shortcuts" title="Keyboard shortcuts">
               <kbd>,</kbd><kbd>.</kbd> adjust (Shift = coarse)<br>
               <kbd>R</kbd> reset / <kbd>M</kbd> master / <kbd>T</kbd> tap / wheel
             </div>
+            <div class="tempo-slider__status"></div>
           </div>
         </div>
       </div>

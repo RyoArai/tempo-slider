@@ -1,96 +1,96 @@
 # TEMPO Slider
 
-Pioneer CDJ 風のテンポ・ピッチコントロールをブラウザに追加する拡張機能。
-DJ 用音源販売サイトでクレートディグ中に、購入前のトラック試聴を**ターゲット BPM・ピッチキープで**聴けます。
+A browser extension that adds Pioneer CDJ-style tempo and pitch controls to music purchase sites.
+Listen to track previews at your **target BPM with master tempo (pitch keep)** while crate-digging.
 
 ![icon](src/icons/icon-128.png)
 
-## 特徴
+## Features
 
-- **CDJ 風 UI**: 垂直 TEMPO フェーダー、レンジ切替 (±6/±10/±16/WIDE)、TEMPO RESET、MASTER TEMPO ボタン (赤 LED)、緑センター LED
-- **DAW 級ピッチキープ**: [Rubber Band Library](https://breakfastquay.com/rubberband/) を WASM で組み込み。MASTER TEMPO ON で音程を保ったままテンポ変更
-- **BPM 表示と入力**: 原曲 BPM × 倍率 = 現在 BPM を常時表示。タップ入力 / 自動検知 / Beatport・Traxsource はページから自動取得
-- **キーボード / マウスホイール対応**: フェーダー上でホイール、`,` `.` キーでテンポ微調整、`R` リセット、`M` MASTER TEMPO、`T` TAP
-- **パネルドラッグ + 位置記憶**: ヘッダーを掴んで好きな位置に移動可能
+- **Pioneer CDJ-style UI**: Vertical TEMPO fader with ±6 / ±10 / ±16 / WIDE range, TEMPO RESET, MASTER TEMPO button (red LED), center 0 LED (green).
+- **DAW-grade pitch keep**: [Rubber Band Library](https://breakfastquay.com/rubberband/) compiled to WebAssembly. Toggle MASTER TEMPO to change tempo while preserving pitch.
+- **BPM display & input**: Live `original BPM × ratio = current BPM` readout. Tap input, audio-based auto detection, and DOM extraction on Beatport / Traxsource.
+- **Keyboard & mouse wheel**: Mouse wheel on the fader, `,` / `.` for fine adjustment, `R` reset, `M` master tempo, `T` tap.
+- **Draggable panel with position memory**: Grab the header to move the panel anywhere — position is persisted.
 
-## 対応サイト
+## Supported sites
 
-ビルトイン:
+Built-in:
 - **Bandcamp**
 - **Beatport**
 - **Traxsource**
 
-その他のサイト: 拡張機能アイコンのポップアップから「+ Add this site」で動的に追加可能 (ユーザー許可必要)。
+Other sites: add any site dynamically via the toolbar popup ("+ Add this site"). Permission is requested on demand.
 
-## インストール
+## Install
 
-### Chrome / Edge (開発版)
+### Chrome / Edge (developer mode)
 
-1. `chrome://extensions/` を開く
-2. 「デベロッパーモード」を ON
-3. 「パッケージ化されていない拡張機能を読み込む」で `src/` ディレクトリを選択
+1. Open `chrome://extensions/`
+2. Enable Developer mode
+3. Click "Load unpacked" and select the `src/` directory
 
-### Firefox (開発版、128 以降)
+### Firefox (developer mode, 128+)
 
-1. `about:debugging#/runtime/this-firefox` を開く
-2. 「一時的なアドオンを読み込む」で `src/manifest.json` を選択
+1. Open `about:debugging#/runtime/this-firefox`
+2. Click "Load Temporary Add-on" and select `src/manifest.json`
 
-### ストア配布
+### Store distribution
 
-近日公開予定 (Chrome Web Store / Firefox AMO)。
+Coming soon on Chrome Web Store and Firefox AMO.
 
-## キーボードショートカット
+## Keyboard shortcuts
 
-| キー | 動作 |
+| Key | Action |
 |---|---|
-| `,` / `.` | テンポ ±0.1% (Shift で ±1.0%) |
-| `R` | TEMPO RESET (0% に戻す) |
-| `M` | MASTER TEMPO 切替 |
+| `,` / `.` | Tempo ±0.1% (Shift = ±1.0%) |
+| `R` | TEMPO RESET (back to 0%) |
+| `M` | Toggle MASTER TEMPO |
 | `T` | TAP |
-| マウスホイール (フェーダー上) | ±0.1% (Shift で ±1.0%) |
+| Mouse wheel on fader | ±0.1% (Shift = ±1.0%) |
 
-入力中フィールドにフォーカスがある時は全て無効化されます。
+All shortcuts are disabled while focus is on a text input.
 
-## アーキテクチャ概要
+## Architecture
 
-- **content.js**: パネル UI、フェーダー、BPM 計算、サイト判定
-- **page-inject.js** (Beatport / Traxsource): メインワールド注入で `Audio` コンストラクタ・`createBufferSource`・`HTMLMediaElement.play` をモンキーパッチし、DOM 外の音源も捕捉
-- **rubberband-worklet.js**: [rubberband-web](https://github.com/delude88/rubberband-web) v0.2.1 を vendor。AudioContext 内で動く WASM ベースの時間伸縮 / ピッチシフター
-- **background.js**: ユーザー追加サイトの動的 contentScripts 登録・DNR ルール管理
-- **rules.json** (静的) + 動的 DNR: 対応サイトの CSP 除去 (Emscripten の eval 許可) と音声 CDN への CORS ヘッダ付与
+- **content.js**: Panel UI, fader, BPM calculation, site detection.
+- **page-inject.js** (Beatport / Traxsource): Main-world injection. Monkey-patches `Audio` constructor, `createBufferSource`, and `HTMLMediaElement.play` to capture audio sources that don't appear in the DOM.
+- **rubberband-worklet.js**: [rubberband-web](https://github.com/delude88/rubberband-web) v0.2.1, vendored as-is. WASM-based time-stretching / pitch-shifting running inside the page's AudioContext.
+- **background.js**: Service worker. Dynamically registers content scripts and declarativeNetRequest rules for sites the user has added.
+- **rules.json** (static) + dynamic DNR rules: Remove CSP headers on supported pages (so Emscripten's `new Function` can run) and inject CORS headers on audio CDN responses.
 
-## ライセンス
+## License
 
-[GPL-2.0](LICENSE) — Rubber Band Library が GPL-2.0-or-later で提供されているため。
+[GPL-2.0](LICENSE) — required because the bundled Rubber Band Library is GPL-2.0-or-later.
 
-## プライバシー
+## Privacy
 
-[PRIVACY.md](PRIVACY.md) を参照。データの収集・送信は一切行いません。すべての処理はブラウザ内で完結します。
+See [PRIVACY.md](PRIVACY.md). No data is collected or transmitted. All processing happens locally in your browser.
 
-## 開発 / ビルド
+## Development / build
 
-### 必要環境
+### Requirements
 - bash / zip / git
-- (任意) Node.js + npm (rubberband-web の更新時のみ)
+- (optional) Node.js + npm — only needed to refresh `rubberband-worklet.js`
 
-### コマンド
+### Commands
 ```bash
-# 拡張機能 ZIP 作成 (ストア提出用)
+# Extension ZIP (for store submission)
 ./scripts/build.sh
 # → dist/tempo-slider-X.X.X.zip
 
-# ソースコード ZIP 作成 (Firefox AMO 提出用)
+# Source ZIP (for Firefox AMO source code submission)
 ./scripts/build-source.sh
 # → dist/tempo-slider-source-X.X.X.zip
 ```
 
 ### Build instructions for AMO reviewers
 
-このアドオンには transpile / 難読化 / minification は使っていません。`src/` 以下のファイルはそのまま実行されます。
+This extension does **not** use transpilation, minification, or obfuscation for its own code. All files under `src/` are hand-written JavaScript / CSS / HTML / JSON and run as-is.
 
-`src/rubberband-worklet.js` のみ npm パッケージ [`rubberband-web@0.2.1`](https://www.npmjs.com/package/rubberband-web) からそのまま vendor したファイル (webpack で bundle 済み、Rubber Band Library を WebAssembly に compile したもの)。これは AMO のルールにある "オープンソースのサードパーティライブラリーを除く" の例外に該当します。
+The only machine-generated file is `src/rubberband-worklet.js`, which is the unmodified pre-built file from the npm package [`rubberband-web@0.2.1`](https://www.npmjs.com/package/rubberband-web) (a webpack-bundled build of the Rubber Band Library compiled to WebAssembly). This falls under AMO's exception for "open-source third-party libraries".
 
-該当ファイルを再生成するには:
+To reproduce this file:
 
 ```bash
 npm pack rubberband-web@0.2.1
@@ -98,10 +98,10 @@ tar -xzf rubberband-web-0.2.1.tgz
 cp package/public/rubberband-processor.js src/rubberband-worklet.js
 ```
 
-オリジナルの GitHub リポジトリ: https://github.com/delude88/rubberband-web (GPL-2.0-or-later)
+Original repository: https://github.com/delude88/rubberband-web (GPL-2.0-or-later)
 
-検証コマンド:
+Verify integrity:
 ```bash
 sha256sum src/rubberband-worklet.js package/public/rubberband-processor.js
-# → 同一ハッシュであることを確認
+# → both files should have identical hashes
 ```

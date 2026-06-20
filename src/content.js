@@ -33,6 +33,48 @@
     // （CDJ 非 MASTER TEMPO モードでも速度と一緒にピッチが動く挙動になり、CDJ 仕様に合う）
     try { audioEl.preservesPitch = false; } catch {}
     state.hookedElement = audioEl;
+
+    // 曲切替検知: 新しい曲が読み込まれたら BPM 情報だけクリア
+    // テンポオフセット / MASTER TEMPO は維持（DJ 練習で次曲も同じテンポで継続）
+    let lastTrackKey = getTrackKey(audioEl);
+    audioEl.addEventListener('loadstart', () => {
+      const key = getTrackKey(audioEl);
+      if (key && key !== lastTrackKey) {
+        lastTrackKey = key;
+        onTrackChange();
+      }
+    });
+
+    applyTempo();
+  }
+
+  function getTrackKey(audioEl) {
+    const src = audioEl.currentSrc || audioEl.src;
+    if (!src) return null;
+    // クエリストリングは signed URL の場合変わるので除外
+    try { return new URL(src).pathname; } catch { return src; }
+  }
+
+  function onTrackChange() {
+    // BPM 関連のみリセット（テンポオフセット・レンジ・MASTER TEMPO は維持）
+    state.originalBpm = null;
+    state.tapTimes = [];
+    if (state.bpmDetector) {
+      try { state.bpmDetector.stop(); } catch {}
+      state.bpmDetector = null;
+    }
+    if (panelRefs) {
+      if (panelRefs.originalInput) panelRefs.originalInput.value = '';
+      if (panelRefs.statusEl) {
+        panelRefs.statusEl.textContent = 'Track changed — BPM cleared';
+        setTimeout(() => {
+          if (panelRefs && panelRefs.statusEl &&
+              panelRefs.statusEl.textContent === 'Track changed — BPM cleared') {
+            panelRefs.statusEl.textContent = '';
+          }
+        }, 2500);
+      }
+    }
     applyTempo();
   }
 

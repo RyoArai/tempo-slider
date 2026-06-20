@@ -752,12 +752,28 @@
   // ============================================================
   function extractBeatportBpm() {
     if (SITE !== 'beatport') return null;
-    // テキストベース検索: "BPM 128" や "BPM: 128" のパターン
+    // 1) Beatport プレイヤーの BPM 表示要素を直接狙う
+    //    例: <p class="Player-style__BPMInfo-sc-..."" >125 bpm</p>
+    const els = document.querySelectorAll('[class*="BPMInfo"]');
+    for (const el of els) {
+      const m = (el.textContent || '').match(/(\d{2,3}(?:\.\d+)?)/);
+      if (m) {
+        const bpm = parseFloat(m[1]);
+        if (bpm >= 50 && bpm <= 220) return Math.round(bpm);
+      }
+    }
+    // 2) フォールバック: ページテキスト全体から
     const bodyText = document.body.innerText || '';
-    const m = bodyText.match(/BPM\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)/i);
-    if (m) {
-      const bpm = parseFloat(m[1]);
-      if (bpm >= 50 && bpm <= 220) return Math.round(bpm);
+    const patterns = [
+      /(\d{2,3}(?:\.\d+)?)\s*bpm/i,            // "125 bpm"
+      /bpm\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)/i,    // "BPM: 125"
+    ];
+    for (const p of patterns) {
+      const m = bodyText.match(p);
+      if (m) {
+        const bpm = parseFloat(m[1]);
+        if (bpm >= 50 && bpm <= 220) return Math.round(bpm);
+      }
     }
     return null;
   }
@@ -775,15 +791,20 @@
     // page-inject に worklet URL を渡す（MASTER TEMPO に必要）
     postToPage('init', { workletUrl: ext.runtime.getURL('rubberband-worklet.js') });
 
-    // BPM 自動取得: 初回 + URL 変化時 + DOM 変化時
-    setTimeout(maybeExtractBeatportBpm, 1500);
+    // BPM 自動取得: 初回 + URL 変化 + DOM 変化（debounce 付き）
+    let extractTimer = null;
+    function schedule() {
+      if (extractTimer) clearTimeout(extractTimer);
+      extractTimer = setTimeout(maybeExtractBeatportBpm, 400);
+    }
+    setTimeout(schedule, 1000);
     let lastUrl = location.href;
     const observer = new MutationObserver(() => {
       if (location.href !== lastUrl) {
         lastUrl = location.href;
-        lastBeatportBpm = null; // ページ変わったらリセット
-        setTimeout(maybeExtractBeatportBpm, 800);
+        lastBeatportBpm = null;
       }
+      schedule();
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }

@@ -1,13 +1,13 @@
 # TEMPO Slider
 
-A browser extension that adds Pioneer CDJ-style tempo and pitch controls to music purchase sites.
+A browser extension that adds CDJ-style tempo and pitch controls to music purchase sites.
 Listen to track previews at your **target BPM with master tempo (pitch keep)** while crate-digging.
 
 ![icon](src/icons/icon-128.png)
 
 ## Features
 
-- **Pioneer CDJ-style UI**: Vertical TEMPO fader with ±6 / ±10 / ±16 / WIDE range, TEMPO RESET, MASTER TEMPO button (red LED), center 0 LED (green).
+- **CDJ-style UI**: Vertical TEMPO fader with ±6 / ±10 / ±16 / WIDE range, TEMPO RESET, MASTER TEMPO button (red LED), center 0 LED (green).
 - **DAW-grade pitch keep**: [Rubber Band Library](https://breakfastquay.com/rubberband/) compiled to WebAssembly. Toggle MASTER TEMPO to change tempo while preserving pitch.
 - **BPM display & input**: Live `original BPM × ratio = current BPM` readout. Tap input, audio-based auto detection, and DOM extraction on Beatport / Traxsource.
 - **Keyboard & mouse wheel**: Mouse wheel on the fader, `,` / `.` for fine adjustment, `R` reset, `M` master tempo, `T` tap.

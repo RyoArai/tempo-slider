@@ -1,7 +1,7 @@
 // TEMPO Slider - popup script
 
 const ext = (typeof browser !== 'undefined') ? browser : chrome;
-const BUILTIN = ['bandcamp.com', 'beatport.com', 'boomkat.com', 'traxsource.com'];
+const BUILTIN = ['bandcamp.com', 'beatport.com', 'traxsource.com'];
 
 const $ = (sel) => document.querySelector(sel);
 

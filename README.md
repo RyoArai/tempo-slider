@@ -20,7 +20,6 @@ Listen to track previews at your **target BPM with master tempo (pitch keep)** w
 Built-in:
 - **Bandcamp**
 - **Beatport**
-- **Boomkat**
 - **Traxsource**
 
 Other sites: add any site dynamically via the toolbar popup ("+ Add this site"). Permission is requested on demand.

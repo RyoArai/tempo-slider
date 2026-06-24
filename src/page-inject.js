@@ -76,6 +76,21 @@
   // 要素を Web Audio グラフに乗せる
   async function setupElementGraph(el) {
     if (elementGraphs.has(el)) return elementGraphs.get(el);
+
+    // cross-origin で crossOrigin 属性未設定の場合 createMediaElementSource で
+    // tainted（muted）になるためスキップ。これがないと MASTER TEMPO 押下で
+    // 該当 element の音が消えてしまう。
+    const src = el.currentSrc || el.src;
+    if (src) {
+      try {
+        const url = new URL(src, location.href);
+        if (url.origin !== location.origin && !el.crossOrigin) {
+          console.warn('[TEMPO Slider] media element cross-origin without crossOrigin — graph skipped');
+          return null;
+        }
+      } catch (e) {}
+    }
+
     const ctx = ensureAudioContext();
     await ensureWorklet();
     let source;

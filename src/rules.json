@@ -29,6 +29,20 @@
     }
   },
   {
+    "id": 8,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "access-control-allow-origin", "operation": "set", "value": "*" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||bandcamp.com/",
+      "resourceTypes": ["media", "xmlhttprequest", "other"]
+    }
+  },
+  {
     "id": 3,
     "priority": 1,
     "action": {
@@ -97,35 +111,6 @@
     },
     "condition": {
       "urlFilter": "||traxsource.com/",
-      "resourceTypes": ["media", "xmlhttprequest", "other"]
-    }
-  },
-  {
-    "id": 8,
-    "priority": 1,
-    "action": {
-      "type": "modifyHeaders",
-      "responseHeaders": [
-        { "header": "content-security-policy", "operation": "remove" },
-        { "header": "content-security-policy-report-only", "operation": "remove" }
-      ]
-    },
-    "condition": {
-      "urlFilter": "||boomkat.com/",
-      "resourceTypes": ["main_frame", "sub_frame"]
-    }
-  },
-  {
-    "id": 9,
-    "priority": 1,
-    "action": {
-      "type": "modifyHeaders",
-      "responseHeaders": [
-        { "header": "access-control-allow-origin", "operation": "set", "value": "*" }
-      ]
-    },
-    "condition": {
-      "urlFilter": "||boomkat.com/",
       "resourceTypes": ["media", "xmlhttprequest", "other"]
     }
   }

@@ -7,14 +7,13 @@
   const ext = (typeof browser !== 'undefined') ? browser : chrome;
 
   // サイト種別判定
-  //   bandcamp / boomkat: HTML <audio> 要素経由
+  //   bandcamp: HTML <audio> 要素経由
   //   beatport / traxsource: Web Audio 直接再生（page-inject.js 経由で制御）
   //   custom: ユーザーが popup から追加したサイト
   const SITE = (() => {
     const h = location.hostname;
     if (h.endsWith('beatport.com')) return 'beatport';
     if (h.endsWith('traxsource.com')) return 'traxsource';
-    if (h.endsWith('boomkat.com')) return 'boomkat';
     if (h.endsWith('bandcamp.com')) return 'bandcamp';
     return 'custom';
   })();
@@ -23,7 +22,6 @@
     bandcamp: 'bandcamp.com',
     beatport: 'beatport.com',
     traxsource: 'traxsource.com',
-    boomkat: 'boomkat.com',
   };
   const USES_PAGE_INJECT = (SITE === 'beatport' || SITE === 'traxsource');
   const MSG_TAG = '__tempoSlider';
@@ -38,7 +36,10 @@
     workletNode: null,
     gainNode: null,
     workletLoaded: false,
-    hookedElement: null,
+    // 複数 <audio> 要素に対応するため Set で全要素を保持し、
+    // ensureGraph / MASTER TEMPO / BPM 検知は activeElement（最後に play されたもの）を使う
+    hookedElements: new Set(),
+    activeElement: null,
     graphedElement: null,
     masterTempo: false,          // MASTER TEMPO（ピッチキープ）
     tempoOffset: 0,              // テンポオフセット (%)、フェーダー値
@@ -49,38 +50,38 @@
     bpmDetector: null,
   };
 
-  function findAudioElement() {
-    return document.querySelector('audio');
+  function findAudioElements() {
+    return Array.from(document.querySelectorAll('audio'));
   }
 
   function attachLightweight(audioEl) {
-    if (state.hookedElement === audioEl) return;
+    if (!audioEl || state.hookedElements.has(audioEl)) return;
     // SoundTouchJS が動作する条件: ブラウザ側のピッチ保持を OFF
     // （CDJ 非 MASTER TEMPO モードでも速度と一緒にピッチが動く挙動になり、CDJ 仕様に合う）
     try { audioEl.preservesPitch = false; } catch {}
-    const hadPreviousElement = state.hookedElement !== null && state.hookedElement !== audioEl;
-    state.hookedElement = audioEl;
+    state.hookedElements.add(audioEl);
+    // 最初の要素を activeElement に。play 時に切り替わる
+    if (!state.activeElement) state.activeElement = audioEl;
+
+    // ユーザーが再生開始した要素を active 扱いにする（MASTER TEMPO / BPM 検知の対象）
+    audioEl.addEventListener('play', () => {
+      state.activeElement = audioEl;
+    });
 
     // 曲切替検知: 新しい曲が読み込まれたら BPM 情報だけクリア
     // テンポオフセット / MASTER TEMPO は維持（DJ 練習で次曲も同じテンポで継続）
-    //
-    // 複数のシグナルで検知:
-    //   1) loadstart / emptied: src 差し替え（Bandcamp は基本これ）
-    //   2) durationchange: src は同じでも内容が切り替わる MSE プレーヤー対応
-    //   3) attachLightweight が別の audio 要素で呼ばれる（プレーヤーが要素を作り直すケース）
+    // 複数 audio がある場合、active な要素の src が変わった時のみ通知する
     let lastTrackKey = getTrackKey(audioEl);
     let lastDuration = audioEl.duration;
     const checkTrackChange = () => {
       const key = getTrackKey(audioEl);
       const dur = audioEl.duration;
       const keyChanged = key && key !== lastTrackKey;
-      // duration が NaN→数値、または明確に違う値になった場合のみ曲変更とみなす
-      // （MSE のバッファリングで小数点以下が揺れるケースを誤検知しないよう閾値あり）
       const durChanged = !isNaN(dur) && !isNaN(lastDuration) && Math.abs(dur - lastDuration) > 0.5;
       if (keyChanged || durChanged) {
         lastTrackKey = key;
         lastDuration = dur;
-        onTrackChange();
+        if (audioEl === state.activeElement) onTrackChange();
       } else {
         if (key) lastTrackKey = key;
         if (!isNaN(dur)) lastDuration = dur;
@@ -90,12 +91,9 @@
     audioEl.addEventListener('emptied', checkTrackChange);
     audioEl.addEventListener('durationchange', checkTrackChange);
 
-    if (hadPreviousElement) {
-      // 別の audio 要素に切り替わった = 新しい曲
-      onTrackChange();
-    } else {
-      applyTempo();
-    }
+    // 現在のテンポをこの要素にも反映
+    try { audioEl.defaultPlaybackRate = state.tempoRatio; } catch {}
+    try { audioEl.playbackRate = state.tempoRatio; } catch {}
   }
 
   function getTrackKey(audioEl) {
@@ -131,12 +129,77 @@
   // ============================================================
   // Web Audio グラフ（MASTER TEMPO ON or BPM 自動検知 時に構築）
   // ============================================================
+  // DNR で CORS ヘッダーを付与している既知の音源 CDN
+  // （これらの host の audio はリロードして crossOrigin='anonymous' に変更可能）
+  const CORS_ENABLED_AUDIO_HOSTS = [
+    'bcbits.com',     // Bandcamp CDN
+    'akamaized.net',  // 一部音源 CDN
+  ];
+
+  function isCrossOriginAudio(audioEl) {
+    if (!audioEl) return false;
+    const src = audioEl.currentSrc || audioEl.src;
+    if (!src) return false;
+    try {
+      const url = new URL(src, location.href);
+      return url.origin !== location.origin;
+    } catch {
+      return false;
+    }
+  }
+
+  function audioSupportsCors(audioEl) {
+    if (!audioEl) return false;
+    // ページ側が crossorigin 属性を付けている = サーバが CORS 対応している前提
+    if (audioEl.crossOrigin) return true;
+    const src = audioEl.currentSrc || audioEl.src;
+    if (!src) return false;
+    try {
+      const url = new URL(src, location.href);
+      return CORS_ENABLED_AUDIO_HOSTS.some(d =>
+        url.hostname === d || url.hostname.endsWith('.' + d));
+    } catch {
+      return false;
+    }
+  }
+
   async function ensureGraph() {
-    if (!state.hookedElement) return false;
-    if (state.graphedElement === state.hookedElement) return true;
+    const target = state.activeElement;
+    if (!target) return false;
+
+    // built-in サイト (bandcamp 等) は DNR で CORS 対応済みなので常に reload 許可。
+    // Bandcamp の audio src は `bandcamp.com/stream_redirect?...` という同一オリジン URL だが、
+    // 実体は `bcbits.com` へ 302 リダイレクトされ実際は cross-origin なため、
+    // URL の見た目では判定できない。
+    const isBuiltinSite = !!BUILTIN_HOST[SITE];
+
+    // cross-origin で CORS 対応が不明な音源（custom サイト等）は Web Audio グラフ化しない
+    // (crossOrigin リロードで再生破壊する／グラフ経由で muted 出力になるのを防ぐ)
+    if (!isBuiltinSite && isCrossOriginAudio(target) && !audioSupportsCors(target)) {
+      console.warn('[TEMPO Slider] cross-origin audio without CORS — graph build skipped');
+      return false;
+    }
+
+    if (state.graphedElement === target) {
+      // 既にグラフ構築済みでも、context が suspended のままだと
+      // 音が止まったままになるので resume を fire-and-forget で
+      // (await すると user activation が消費されて後続 play() が autoplay policy で
+      //  ブロックされる可能性があるため)
+      if (state.audioCtx && state.audioCtx.state === 'suspended') {
+        state.audioCtx.resume().catch(() => {});
+      }
+      return true;
+    }
 
     if (!state.audioCtx) {
       state.audioCtx = new AudioContext();
+    }
+    // 新規 AudioContext はブラウザの autoplay policy により suspended で
+    // 生成される。resume は fire-and-forget で呼ぶ（await すると user activation が
+    // 消費され、後の reload→play() が blocked される）。context が running になる
+    // タイミングは createMediaElementSource より遅れても、後で音は鳴り始める。
+    if (state.audioCtx.state === 'suspended') {
+      state.audioCtx.resume().catch(() => {});
     }
 
     if (!state.workletLoaded) {
@@ -149,19 +212,30 @@
     }
 
     try {
-      if (!state.hookedElement.crossOrigin) {
-        const wasPlaying = !state.hookedElement.paused;
-        const currentTime = state.hookedElement.currentTime;
-        state.hookedElement.crossOrigin = 'anonymous';
-        state.hookedElement.load();
-        state.hookedElement.currentTime = currentTime;
-        if (wasPlaying) state.hookedElement.play().catch(() => {});
+      // crossOrigin 未設定で:
+      //   - cross-origin audio、または
+      //   - built-in サイト（src は同一オリジンに見えても redirect 先が cross-origin の可能性）
+      // の場合 reload して CORS リクエストし直す。
+      // Bandcamp は audio src が `bandcamp.com/stream_redirect?...` で実体は bcbits.com への 302 リダイレクト。
+      // 未対応 CDN へのリロードはサーバ側の CORS ヘッダー欠如で audio が壊れるが、
+      // 既に上の early-return で除外済み（built-in は DNR で CORS 対応済み）。
+      if (!target.crossOrigin && (isCrossOriginAudio(target) || isBuiltinSite)) {
+        const wasPlaying = !target.paused;
+        const savedCurrentTime = target.currentTime;
+        target.crossOrigin = 'anonymous';
+        target.load();
+        // load() 直後は readyState=HAVE_NOTHING で currentTime セットが
+        // InvalidStateError を投げる場合があるので try-catch で保護
+        try { target.currentTime = savedCurrentTime; } catch {}
+        if (wasPlaying) {
+          target.play().catch(e => console.warn('[TEMPO Slider] play after reload failed:', e.name, e.message));
+        }
       }
       // SoundTouchJS が動作する条件: ブラウザ側のピッチ保持を OFF
-      try { state.hookedElement.preservesPitch = false; } catch {}
-      state.sourceNode = state.audioCtx.createMediaElementSource(state.hookedElement);
+      try { target.preservesPitch = false; } catch {}
+      state.sourceNode = state.audioCtx.createMediaElementSource(target);
       state.gainNode = state.audioCtx.createGain();
-      state.graphedElement = state.hookedElement;
+      state.graphedElement = target;
       rebuildGraph();
       return true;
     } catch (e) {
@@ -212,12 +286,13 @@
 
   function applyTempo() {
     state.tempoRatio = 1 + state.tempoOffset / 100;
-    if (state.hookedElement) {
-      // defaultPlaybackRate も設定しておくと、次曲ロード時に
-      // ブラウザのリソース選択アルゴリズムが playbackRate をリセットする際の
-      // リセット先がテンポ比率になり、テンポが維持される
-      try { state.hookedElement.defaultPlaybackRate = state.tempoRatio; } catch {}
-      state.hookedElement.playbackRate = state.tempoRatio;
+    // ページ上の全 audio 要素にテンポを反映（複数試聴サンプルがあるレコード屋等に対応）
+    // defaultPlaybackRate も設定しておくと、次曲ロード時に
+    // ブラウザのリソース選択アルゴリズムが playbackRate をリセットする際の
+    // リセット先がテンポ比率になり、テンポが維持される
+    for (const el of state.hookedElements) {
+      try { el.defaultPlaybackRate = state.tempoRatio; } catch {}
+      try { el.playbackRate = state.tempoRatio; } catch {}
     }
     if (state.masterTempo && state.workletNode) {
       // Rubber Band の pitch を audio.playbackRate の逆数に設定してピッチを元に戻す
@@ -239,7 +314,7 @@
     // page-inject 経路を使うケース:
     //   - Beatport / Traxsource など built-in の Web Audio 系サイト
     //   - audio 要素が見つからないカスタムサイト（Web Audio で再生するレコード屋など）
-    const usePageInject = USES_PAGE_INJECT || !state.hookedElement;
+    const usePageInject = USES_PAGE_INJECT || !state.activeElement;
     if (usePageInject) {
       return new Promise((resolve) => {
         const handler = (e) => {
@@ -365,12 +440,13 @@
 
   function watchAudioChanges() {
     const observer = new MutationObserver(() => {
-      const el = findAudioElement();
-      if (el && el !== state.hookedElement) attachLightweight(el);
+      // ページ上の全 audio 要素を捕捉（複数試聴サンプル等に対応）
+      for (const el of findAudioElements()) {
+        if (!state.hookedElements.has(el)) attachLightweight(el);
+      }
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    const el = findAudioElement();
-    if (el) attachLightweight(el);
+    for (const el of findAudioElements()) attachLightweight(el);
   }
 
   // ============================================================
@@ -678,6 +754,13 @@
 
     masterBtn.addEventListener('click', async () => {
       const next = !state.masterTempo;
+      // CORS 未対応の cross-origin 音源は事前に拒否（再生破壊回避）
+      if (next && state.activeElement &&
+          isCrossOriginAudio(state.activeElement) &&
+          !audioSupportsCors(state.activeElement)) {
+        statusEl.textContent = 'MASTER TEMPO unavailable (cross-origin audio without CORS)';
+        return;
+      }
       statusEl.textContent = next ? 'Building audio graph...' : '';
       masterBtn.disabled = true;
       const ok = await setMasterTempo(next);
@@ -729,6 +812,13 @@
 
       // BandCamp: 音声解析で BPM 検知
       if (state.bpmDetector) return;
+      // CORS 未対応の cross-origin 音源は事前に拒否
+      if (state.activeElement &&
+          isCrossOriginAudio(state.activeElement) &&
+          !audioSupportsCors(state.activeElement)) {
+        statusEl.textContent = 'AUTO unavailable (cross-origin audio without CORS)';
+        return;
+      }
       statusEl.textContent = 'Preparing graph...';
       const ok = await ensureGraph();
       if (!ok) { statusEl.textContent = 'Graph build failed'; return; }
@@ -876,18 +966,10 @@
   }
 
   // 起動
-  async function start() {
-    // 組み込みサイトがユーザーによって無効化されていたら何もしない
-    const builtinHost = BUILTIN_HOST[SITE];
-    if (builtinHost) {
-      try {
-        const result = await ext.storage.local.get('disabledBuiltins');
-        const disabled = Array.isArray(result.disabledBuiltins) &&
-          result.disabledBuiltins.includes(builtinHost);
-        if (disabled) return;
-      } catch (e) {}
-    }
-
+  // パネル注入は同期的に行う（disabledBuiltins チェックの await を待たない）。
+  // これにより storage アクセスの遅延や障害があっても、組み込みサイトでは
+  // 確実にパネルが表示される。disabled の場合は後から panel を取り除く。
+  function init() {
     injectPanel();
     watchAudioChanges();
     // page-inject へ worklet URL を渡しておく（カスタムサイトを含めて
@@ -901,5 +983,39 @@
       }
     }, true);
   }
-  start();
+
+  function teardown() {
+    const panel = document.getElementById('tempo-slider-panel');
+    if (panel) panel.remove();
+  }
+
+  init();
+
+  // disabled state の async チェック → disabled なら teardown
+  const builtinHost = BUILTIN_HOST[SITE];
+  if (builtinHost) {
+    ext.storage.local.get('disabledBuiltins').then(result => {
+      const disabled = Array.isArray(result.disabledBuiltins) &&
+        result.disabledBuiltins.includes(builtinHost);
+      if (disabled) teardown();
+    }).catch(() => {});
+  }
+
+  // worklet をページロード時に事前ロード。
+  // MASTER TEMPO/AUTO 押下時の `await audioWorklet.addModule()` を排除し、
+  // user gesture を `audio.play()` まで保持させる（さもないと
+  // autoplay policy で reload 後の play() がブロックされる）。
+  // AudioContext は suspended で生成され、ボタン押下時にユーザー操作で resume する。
+  (function preloadWorklet() {
+    try {
+      if (!state.audioCtx) state.audioCtx = new AudioContext();
+      if (state.workletLoaded) return;
+      state.audioCtx.audioWorklet.addModule(ext.runtime.getURL('rubberband-worklet.js'))
+        .then(() => { state.workletLoaded = true; })
+        .catch(e => console.warn('[TEMPO Slider] worklet preload failed:', e));
+    } catch (e) {
+      // AudioContext 生成に失敗する環境では preload を諦め、ensureGraph 内で再試行
+      console.warn('[TEMPO Slider] preloadWorklet failed:', e);
+    }
+  })();
 })();

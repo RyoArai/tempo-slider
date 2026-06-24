@@ -9,7 +9,7 @@ The extension processes audio entirely **locally in your browser**.
 
 ## What the extension does
 
-- Modifies the playback rate and pitch of audio playing on supported sites (Bandcamp, Beatport, Traxsource, and any sites you add yourself).
+- Modifies the playback rate and pitch of audio playing on supported sites (Bandcamp, Beatport, Boomkat, Traxsource, and any sites you add yourself).
 - Stores your local panel position and added-site list in your browser using `chrome.storage.local`. This data never leaves your device.
 - Removes Content-Security-Policy headers from supported sites so the bundled pitch-shifting library (Rubber Band, via Emscripten) can run inside the page's AudioContext.
 - Adds CORS headers to audio CDN responses for supported sites so the extension can route audio through its DSP pipeline.
@@ -30,7 +30,7 @@ The extension processes audio entirely **locally in your browser**.
 | `storage` | Save your panel position and the list of sites you've added |
 | `scripting` | Inject content scripts into custom sites you add at runtime |
 | `declarativeNetRequest`, `declarativeNetRequestWithHostAccess` | Add CORS and remove CSP headers for supported sites (locally, in your browser) |
-| `host_permissions` (bandcamp / bcbits / beatport / traxsource / akamaized) | Inject the player UI and DSP into the built-in supported sites |
+| `host_permissions` (bandcamp / bcbits / beatport / traxsource / boomkat / akamaized) | Inject the player UI and DSP into the built-in supported sites |
 | `optional_host_permissions` (`https://*/*`) | Reserved for sites you explicitly add via the popup. Not granted by default |
 
 ## Open source

@@ -169,6 +169,7 @@
 
 /* レール（中央の縦線） */
 #tempo-slider-panel .tempo-slider__fader-rail {
+  display: block; /* ページ側の `div:empty { display: none }` を上書き */
   position: absolute;
   left: 50%;
   top: 14px;
@@ -182,6 +183,7 @@
 
 /* Thumb（つまみバー） */
 #tempo-slider-panel .tempo-slider__fader-thumb {
+  display: block; /* ページ側の `div:empty { display: none }` を上書き */
   position: absolute;
   left: 50%;
   top: 50%;

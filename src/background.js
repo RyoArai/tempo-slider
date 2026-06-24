@@ -6,6 +6,7 @@
 //   - chrome.storage.local への永続化（拡張機能の再起動後も復元）
 
 const STORAGE_KEY = 'customSites';
+const DISABLED_BUILTINS_KEY = 'disabledBuiltins';
 const DNR_RULE_ID_START = 1000;
 
 // ---------- 永続化 ----------
@@ -16,6 +17,30 @@ async function loadCustomSites() {
 
 async function saveCustomSites(sites) {
   await chrome.storage.local.set({ [STORAGE_KEY]: sites });
+}
+
+async function loadDisabledBuiltins() {
+  const result = await chrome.storage.local.get(DISABLED_BUILTINS_KEY);
+  return Array.isArray(result[DISABLED_BUILTINS_KEY]) ? result[DISABLED_BUILTINS_KEY] : [];
+}
+
+async function saveDisabledBuiltins(list) {
+  await chrome.storage.local.set({ [DISABLED_BUILTINS_KEY]: list });
+}
+
+async function disableBuiltin(hostname) {
+  const list = await loadDisabledBuiltins();
+  if (!list.includes(hostname)) {
+    list.push(hostname);
+    await saveDisabledBuiltins(list);
+  }
+  return { ok: true };
+}
+
+async function enableBuiltin(hostname) {
+  const list = await loadDisabledBuiltins();
+  await saveDisabledBuiltins(list.filter(h => h !== hostname));
+  return { ok: true };
 }
 
 // ---------- ホスト名のパターン展開 ----------
@@ -39,6 +64,7 @@ async function registerScriptsForSite(hostname) {
         id: ids[0],
         matches,
         js: ['content.js'],
+        css: ['panel.css'],
         runAt: 'document_idle',
       },
       {
@@ -184,7 +210,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'listSites') {
-    loadCustomSites().then(sites => sendResponse({ ok: true, sites }));
+    Promise.all([loadCustomSites(), loadDisabledBuiltins()])
+      .then(([sites, disabledBuiltins]) => sendResponse({ ok: true, sites, disabledBuiltins }));
+    return true;
+  }
+  if (msg.type === 'disableBuiltin') {
+    disableBuiltin(msg.hostname).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'enableBuiltin') {
+    enableBuiltin(msg.hostname).then(sendResponse);
     return true;
   }
 });

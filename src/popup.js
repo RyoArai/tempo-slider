@@ -1,9 +1,11 @@
 // TEMPO Slider - popup script
 
 const ext = (typeof browser !== 'undefined') ? browser : chrome;
-const BUILTIN = ['bandcamp.com', 'beatport.com', 'traxsource.com'];
+const BUILTIN = ['bandcamp.com', 'beatport.com', 'boomkat.com', 'traxsource.com'];
 
 const $ = (sel) => document.querySelector(sel);
+
+let currentTabInfo = null;
 
 async function getCurrentTab() {
   const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
@@ -39,28 +41,88 @@ async function bg(payload) {
   return ext.runtime.sendMessage({ target: 'tempo-slider-bg', ...payload });
 }
 
-async function init() {
+async function refresh() {
+  await refreshCurrentSiteButton();
+  await renderList();
+}
+
+async function refreshCurrentSiteButton() {
   const tab = await getCurrentTab();
   const host = tab && tab.url ? extractHostname(tab.url) : null;
   const root = host ? reduceToRoot(host) : null;
   const isHttp = tab && tab.url && /^https?:/.test(tab.url);
+  currentTabInfo = { tab, host, root, isHttp };
 
   $('#currentHost').textContent = host || '(no site)';
 
   const btn = $('#addCurrent');
+  // 過去の onclick ハンドラをリセット（refresh 時の累積を防ぐ）
+  btn.onclick = null;
+
   if (!isHttp || !root) {
     btn.disabled = true;
     btn.textContent = 'Not a regular page';
-  } else if (isBuiltin(root)) {
+    return;
+  }
+
+  const stored = await ext.storage.local.get(['customSites', 'disabledBuiltins']);
+  const customSites = Array.isArray(stored.customSites) ? stored.customSites : [];
+  const disabledBuiltins = Array.isArray(stored.disabledBuiltins) ? stored.disabledBuiltins : [];
+
+  if (isBuiltin(root)) {
+    if (disabledBuiltins.includes(root)) {
+      btn.disabled = false;
+      btn.textContent = `+ Re-enable ${root}`;
+      btn.onclick = () => enableBuiltinSite(root, tab.id);
+    } else {
+      btn.disabled = true;
+      btn.textContent = 'Already supported (built-in)';
+    }
+  } else if (customSites.includes(root)) {
     btn.disabled = true;
-    btn.textContent = 'Already supported (built-in)';
+    btn.textContent = 'Already added';
   } else {
     btn.disabled = false;
     btn.textContent = `+ Add ${root}`;
-    btn.addEventListener('click', () => addSite(root, tab.id));
+    btn.onclick = () => addSite(root, tab.id);
   }
+}
 
-  await renderList();
+async function renderList() {
+  const res = await bg({ type: 'listSites' });
+  const customSites = (res && res.sites) || [];
+  const disabledBuiltins = (res && res.disabledBuiltins) || [];
+  const enabledBuiltins = BUILTIN.filter(b => !disabledBuiltins.includes(b));
+  const allSites = [...enabledBuiltins, ...customSites].sort();
+
+  const ul = $('#siteList');
+  ul.replaceChildren();
+  if (allSites.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'ts-popup__empty';
+    li.textContent = '(all sites disabled)';
+    ul.appendChild(li);
+    return;
+  }
+  for (const site of allSites) {
+    const isBuiltinSite = BUILTIN.includes(site);
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.textContent = site;
+    const btn = document.createElement('button');
+    btn.textContent = '×';
+    btn.title = isBuiltinSite ? `Disable ${site}` : `Remove ${site}`;
+    btn.addEventListener('click', () => {
+      if (isBuiltinSite) {
+        disableBuiltinSite(site);
+      } else {
+        removeSite(site);
+      }
+    });
+    li.appendChild(span);
+    li.appendChild(btn);
+    ul.appendChild(li);
+  }
 }
 
 async function addSite(hostname, tabId) {
@@ -88,7 +150,7 @@ async function addSite(hostname, tabId) {
   } else {
     setStatus(`Failed: ${res && res.error ? res.error : 'unknown'}`, true);
   }
-  await renderList();
+  await refresh();
 }
 
 async function removeSite(hostname) {
@@ -99,33 +161,36 @@ async function removeSite(hostname) {
   } else {
     setStatus('Remove failed', true);
   }
-  await renderList();
+  await refresh();
 }
 
-async function renderList() {
-  const res = await bg({ type: 'listSites' });
-  const sites = (res && res.sites) || [];
-  const ul = $('#siteList');
-  ul.replaceChildren();
-  if (sites.length === 0) {
-    const li = document.createElement('li');
-    li.className = 'ts-popup__empty';
-    li.textContent = '(none yet)';
-    ul.appendChild(li);
-    return;
+async function disableBuiltinSite(hostname) {
+  setStatus('Disabling...');
+  const res = await bg({ type: 'disableBuiltin', hostname });
+  if (res && res.ok) {
+    setStatus(`Disabled ${hostname}`);
+    // 現在のタブが該当ホストなら自動リロード（パネルを消すため）
+    if (currentTabInfo && currentTabInfo.root === hostname && currentTabInfo.tab) {
+      try { await ext.tabs.reload(currentTabInfo.tab.id); } catch (e) {}
+    }
+  } else {
+    setStatus('Disable failed', true);
   }
-  for (const site of sites) {
-    const li = document.createElement('li');
-    const span = document.createElement('span');
-    span.textContent = site;
-    const btn = document.createElement('button');
-    btn.textContent = '×';
-    btn.title = `Remove ${site}`;
-    btn.addEventListener('click', () => removeSite(site));
-    li.appendChild(span);
-    li.appendChild(btn);
-    ul.appendChild(li);
-  }
+  await refresh();
 }
 
-init();
+async function enableBuiltinSite(hostname, tabId) {
+  setStatus('Re-enabling...');
+  const res = await bg({ type: 'enableBuiltin', hostname });
+  if (res && res.ok) {
+    setStatus(`Re-enabled ${hostname}`);
+    if (tabId) {
+      try { await ext.tabs.reload(tabId); } catch (e) {}
+    }
+  } else {
+    setStatus('Re-enable failed', true);
+  }
+  await refresh();
+}
+
+refresh();

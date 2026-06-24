@@ -9,13 +9,22 @@
   // サイト種別判定
   //   bandcamp / boomkat: HTML <audio> 要素経由
   //   beatport / traxsource: Web Audio 直接再生（page-inject.js 経由で制御）
+  //   custom: ユーザーが popup から追加したサイト
   const SITE = (() => {
     const h = location.hostname;
     if (h.endsWith('beatport.com')) return 'beatport';
     if (h.endsWith('traxsource.com')) return 'traxsource';
     if (h.endsWith('boomkat.com')) return 'boomkat';
-    return 'bandcamp';
+    if (h.endsWith('bandcamp.com')) return 'bandcamp';
+    return 'custom';
   })();
+  // 組み込みサイトのホスト名マップ（無効化チェックに使用）
+  const BUILTIN_HOST = {
+    bandcamp: 'bandcamp.com',
+    beatport: 'beatport.com',
+    traxsource: 'traxsource.com',
+    boomkat: 'boomkat.com',
+  };
   const USES_PAGE_INJECT = (SITE === 'beatport' || SITE === 'traxsource');
   const MSG_TAG = '__tempoSlider';
 
@@ -214,10 +223,10 @@
       // Rubber Band の pitch を audio.playbackRate の逆数に設定してピッチを元に戻す
       state.workletNode.port.postMessage(JSON.stringify(['pitch', 1 / state.tempoRatio]));
     }
-    // Beatport / Traxsource: ページの Web Audio に直接 playbackRate を適用
-    if (USES_PAGE_INJECT) {
-      postToPage('setRate', { rate: state.tempoRatio });
-    }
+    // page-inject が読み込まれている環境（Beatport / Traxsource / カスタムサイト）では
+    // 捕捉済みの Web Audio バッファソース / Audio 要素に rate を反映する。
+    // page-inject が無い環境では誰も listen しないため無害。
+    postToPage('setRate', { rate: state.tempoRatio });
     updateTempoDisplay();
     updateCurrentBpmDisplay();
     if (panelRefs && panelRefs.updateFaderThumb) {
@@ -227,8 +236,11 @@
 
   async function setMasterTempo(on) {
     if (on === state.masterTempo) return true;
-    // Beatport / Traxsource: page-inject 側で AudioContext + Rubber Band グラフを構築
-    if (USES_PAGE_INJECT) {
+    // page-inject 経路を使うケース:
+    //   - Beatport / Traxsource など built-in の Web Audio 系サイト
+    //   - audio 要素が見つからないカスタムサイト（Web Audio で再生するレコード屋など）
+    const usePageInject = USES_PAGE_INJECT || !state.hookedElement;
+    if (usePageInject) {
       return new Promise((resolve) => {
         const handler = (e) => {
           if (e.source !== window || !e.data || e.data[MSG_TAG] !== true) return;
@@ -491,21 +503,9 @@
     `;
     document.body.appendChild(panel);
 
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = ext.runtime.getURL('panel.css');
-    // CSS 読み込み完了後にイベントバインド（位置復元を正しい panel サイズで実行するため）
-    let bound = false;
-    const bindOnce = () => {
-      if (bound) return;
-      bound = true;
-      bindPanelEvents(panel);
-    };
-    link.addEventListener('load', bindOnce, { once: true });
-    link.addEventListener('error', bindOnce, { once: true });
-    document.head.appendChild(link);
-    // フォールバック (load イベントが発火しない環境用)
-    setTimeout(bindOnce, 500);
+    // panel.css は manifest の content_scripts.css 経由でブラウザが既に注入済みなので
+    // ここで <link> を追加する必要はない（カスタムサイトでも WAR/CSP に依存せず確実に適用される）
+    bindPanelEvents(panel);
   }
 
   // ============================================================
@@ -857,9 +857,6 @@
   }
 
   function setupPageInjectIntegration() {
-    // page-inject に worklet URL を渡す（MASTER TEMPO に必要）
-    postToPage('init', { workletUrl: ext.runtime.getURL('rubberband-worklet.js') });
-
     // BPM 自動取得: 初回 + URL 変化 + DOM 変化（debounce 付き）
     let extractTimer = null;
     function schedule() {
@@ -879,13 +876,30 @@
   }
 
   // 起動
-  injectPanel();
-  watchAudioChanges();
-  if (USES_PAGE_INJECT) setupPageInjectIntegration();
-
-  document.addEventListener('click', () => {
-    if (state.audioCtx && state.audioCtx.state === 'suspended') {
-      state.audioCtx.resume();
+  async function start() {
+    // 組み込みサイトがユーザーによって無効化されていたら何もしない
+    const builtinHost = BUILTIN_HOST[SITE];
+    if (builtinHost) {
+      try {
+        const result = await ext.storage.local.get('disabledBuiltins');
+        const disabled = Array.isArray(result.disabledBuiltins) &&
+          result.disabledBuiltins.includes(builtinHost);
+        if (disabled) return;
+      } catch (e) {}
     }
-  }, true);
+
+    injectPanel();
+    watchAudioChanges();
+    // page-inject へ worklet URL を渡しておく（カスタムサイトを含めて
+    // MASTER TEMPO 経路で worklet が必要になった時のため）
+    postToPage('init', { workletUrl: ext.runtime.getURL('rubberband-worklet.js') });
+    if (USES_PAGE_INJECT) setupPageInjectIntegration();
+
+    document.addEventListener('click', () => {
+      if (state.audioCtx && state.audioCtx.state === 'suspended') {
+        state.audioCtx.resume();
+      }
+    }, true);
+  }
+  start();
 })();

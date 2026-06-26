@@ -10,7 +10,7 @@
     },
     "condition": {
       "urlFilter": "||bcbits.com/",
-      "resourceTypes": ["media", "xmlhttprequest", "other"]
+      "resourceTypes": ["media"]
     }
   },
   {
@@ -39,7 +39,7 @@
     },
     "condition": {
       "urlFilter": "||bandcamp.com/",
-      "resourceTypes": ["media", "xmlhttprequest", "other"]
+      "resourceTypes": ["media"]
     }
   },
   {
@@ -68,7 +68,7 @@
     },
     "condition": {
       "urlFilter": "||beatport.com/",
-      "resourceTypes": ["media", "xmlhttprequest", "other"]
+      "resourceTypes": ["media"]
     }
   },
   {
@@ -82,7 +82,7 @@
     },
     "condition": {
       "urlFilter": "||akamaized.net/",
-      "resourceTypes": ["media", "xmlhttprequest", "other"]
+      "resourceTypes": ["media"]
     }
   },
   {
@@ -111,7 +111,7 @@
     },
     "condition": {
       "urlFilter": "||traxsource.com/",
-      "resourceTypes": ["media", "xmlhttprequest", "other"]
+      "resourceTypes": ["media"]
     }
   },
   {

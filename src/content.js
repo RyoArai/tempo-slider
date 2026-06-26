@@ -63,16 +63,21 @@
   }
 
   // ============================================================
-  // iframe bridge（YouTube 埋め込みサイト：discogs 等）
+  // iframe bridge（YouTube / Bandcamp 等の埋め込みプレーヤー）
   // ============================================================
-  function findYoutubeIframes() {
-    // youtube.com / youtube-nocookie.com を含む iframe を広めに拾う
-    // （/embed/ パスでない埋め込み形態にも対応するため）
+  // bridge プロトコル対応の iframe を広く拾う:
+  //   - YouTube (youtube.com / youtube-nocookie.com): youtube-bridge.js
+  //   - Bandcamp Embedded Player: bandcamp-bridge.js
+  function findBridgeIframes() {
     return Array.from(document.querySelectorAll('iframe')).filter(f => {
       const s = f.src || '';
-      return s.includes('youtube.com/') || s.includes('youtube-nocookie.com/');
+      return s.includes('youtube.com/')
+          || s.includes('youtube-nocookie.com/')
+          || s.includes('bandcamp.com/EmbeddedPlayer/');
     });
   }
+  // 後方互換用エイリアス
+  const findYoutubeIframes = findBridgeIframes;
 
   function postToBridge(iframe, type, payload) {
     if (!iframe || !iframe.contentWindow) return;
@@ -84,7 +89,7 @@
     } catch (e) {}
   }
 
-  function trackYoutubeIframe(iframe) {
+  function trackBridgeIframe(iframe) {
     if (!iframe || state.bridgeIframes.has(iframe)) return;
     state.bridgeIframes.add(iframe);
     // 既存のテンポを即時反映
@@ -122,24 +127,27 @@
     }
   }
 
-  function watchYoutubeIframes() {
-    console.log('[TEMPO Slider] discogs mode: watching YouTube iframes');
-    // 必要 permission の確認（不足時は警告のみ出して動作は続行）
-    checkYoutubePermission().then(granted => {
-      if (!granted && panelRefs && panelRefs.statusEl) {
-        panelRefs.statusEl.textContent = 'YouTube permission missing — click the extension icon to grant';
-      }
-    });
+  function watchBridgeIframes() {
+    console.log('[TEMPO Slider] watching bridge iframes (YouTube / Bandcamp embeds)');
+    // discogs サイトでのみ YouTube permission チェック（custom サイトでも有用だが
+    // 一旦 discogs のみで案内表示する）
+    if (SITE === 'discogs') {
+      checkYoutubePermission().then(granted => {
+        if (!granted && panelRefs && panelRefs.statusEl) {
+          panelRefs.statusEl.textContent = 'YouTube permission missing — click the extension icon to grant';
+        }
+      });
+    }
     // 既存の iframe を捕捉
-    const initial = findYoutubeIframes();
-    console.log('[TEMPO Slider] initial YouTube iframes found:', initial.length);
-    for (const f of initial) trackYoutubeIframe(f);
+    const initial = findBridgeIframes();
+    console.log('[TEMPO Slider] initial bridge iframes found:', initial.length);
+    for (const f of initial) trackBridgeIframe(f);
     // 動的に追加される iframe も追跡
     const observer = new MutationObserver(() => {
-      for (const f of findYoutubeIframes()) {
+      for (const f of findBridgeIframes()) {
         if (!state.bridgeIframes.has(f)) {
-          console.log('[TEMPO Slider] new YouTube iframe detected:', f.src);
-          trackYoutubeIframe(f);
+          console.log('[TEMPO Slider] new bridge iframe detected:', f.src);
+          trackBridgeIframe(f);
         }
       }
     });
@@ -424,78 +432,106 @@
     }
   }
 
-  async function setMasterTempo(on) {
-    if (on === state.masterTempo) return true;
-    // iframe bridge 経路（discogs 等の YouTube 埋め込みサイト）
-    if (USES_IFRAME_BRIDGE) {
-      const iframes = Array.from(state.bridgeIframes);
-      if (iframes.length === 0) {
-        // 対象 iframe が無い場合は単に状態だけ切り替え、後の iframe 追跡時に反映
-        state.masterTempo = on;
-        applyTempo();
-        return true;
-      }
-      // 全 iframe に setMasterTempo を投げ、応答を集計
-      const results = await Promise.all(iframes.map(iframe => new Promise(resolve => {
-        let done = false;
-        const handler = (e) => {
-          if (e.source !== iframe.contentWindow) return;
-          if (!e.data || e.data[BRIDGE_MSG_TAG] !== true) return;
-          if (e.data.type !== 'masterTempoResult') return;
-          done = true;
+  // YouTube iframe 群への MASTER TEMPO 適用（postMessage で各 iframe に依頼）。
+  // iframe が無ければ true を返す（no-op 成功扱い）。
+  async function applyMasterTempoToIframes(on) {
+    const iframes = Array.from(state.bridgeIframes);
+    if (iframes.length === 0) return true;
+    const results = await Promise.all(iframes.map(iframe => new Promise(resolve => {
+      let done = false;
+      const handler = (e) => {
+        if (e.source !== iframe.contentWindow) return;
+        if (!e.data || e.data[BRIDGE_MSG_TAG] !== true) return;
+        if (e.data.type !== 'masterTempoResult') return;
+        done = true;
+        window.removeEventListener('message', handler);
+        resolve(!!e.data.ok);
+      };
+      window.addEventListener('message', handler);
+      postToBridge(iframe, 'setMasterTempo', { on });
+      setTimeout(() => {
+        if (!done) {
+          window.removeEventListener('message', handler);
+          resolve(false);
+        }
+      }, 5000);
+    })));
+    // 1つでも成功すれば全体としては OK 扱い
+    return results.some(r => r);
+  }
+
+  // page-inject 経由の MASTER TEMPO 適用
+  function applyMasterTempoViaPageInject(on) {
+    return new Promise((resolve) => {
+      const handler = (e) => {
+        if (e.source !== window || !e.data || e.data[MSG_TAG] !== true) return;
+        if (e.data.type === 'masterTempoResult') {
           window.removeEventListener('message', handler);
           resolve(!!e.data.ok);
-        };
-        window.addEventListener('message', handler);
-        postToBridge(iframe, 'setMasterTempo', { on });
-        // タイムアウト保険（5秒）
-        setTimeout(() => {
-          if (!done) {
-            window.removeEventListener('message', handler);
-            resolve(false);
-          }
-        }, 5000);
-      })));
-      const anyOk = results.some(r => r);
-      if (anyOk) {
-        state.masterTempo = on;
-        applyTempo();
-      }
-      return anyOk;
-    }
-    // page-inject 経路を使うケース:
-    //   - Beatport / Traxsource など built-in の Web Audio 系サイト
-    //   - audio 要素が見つからないカスタムサイト（Web Audio で再生するレコード屋など）
-    const usePageInject = USES_PAGE_INJECT || !state.activeElement;
-    if (usePageInject) {
-      return new Promise((resolve) => {
-        const handler = (e) => {
-          if (e.source !== window || !e.data || e.data[MSG_TAG] !== true) return;
-          if (e.data.type === 'masterTempoResult') {
-            window.removeEventListener('message', handler);
-            if (e.data.ok) {
-              state.masterTempo = on;
-              applyTempo();
-            }
-            resolve(!!e.data.ok);
-          }
-        };
-        window.addEventListener('message', handler);
-        postToPage('setMasterTempo', { on });
-      });
-    }
-    // BandCamp (audio 要素経由)
+        }
+      };
+      window.addEventListener('message', handler);
+      postToPage('setMasterTempo', { on });
+      // タイムアウト保険
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        resolve(false);
+      }, 5000);
+    });
+  }
+
+  // <audio> 要素経由の MASTER TEMPO 適用（Bandcamp / custom の audio 要素対応）
+  async function applyMasterTempoToAudio(on) {
     if (on) {
       const ok = await ensureGraph();
       if (!ok) return false;
-      state.masterTempo = true;
-      rebuildGraph();
-    } else {
-      state.masterTempo = false;
-      if (state.sourceNode) rebuildGraph();
     }
-    applyTempo();
+    state.masterTempo = on; // rebuildGraph が読み取るため
+    if (state.sourceNode) rebuildGraph();
     return true;
+  }
+
+  async function setMasterTempo(on) {
+    if (on === state.masterTempo) return true;
+    const previous = state.masterTempo;
+
+    const hasIframes = state.bridgeIframes.size > 0;
+    const hasAudio = !!state.activeElement;
+
+    // 各経路を並行実行：
+    //   - iframe があれば iframe 経路
+    //   - page-inject サイト（Beatport/Traxsource）または audio 要素なし custom サイト
+    //     なら page-inject 経路
+    //   - audio 要素ありなら audio 直接経路
+    // どれもなければ state だけ切り替え（後から要素が見つかれば applyTempo で反映）
+    const promises = [];
+    if (hasIframes) {
+      promises.push(applyMasterTempoToIframes(on));
+    }
+    if (USES_PAGE_INJECT || (!hasAudio && !hasIframes)) {
+      promises.push(applyMasterTempoViaPageInject(on));
+    } else if (hasAudio) {
+      promises.push(applyMasterTempoToAudio(on));
+    }
+
+    if (promises.length === 0) {
+      state.masterTempo = on;
+      applyTempo();
+      return true;
+    }
+
+    const results = await Promise.all(promises);
+    const ok = results.every(r => r);
+    if (ok) {
+      state.masterTempo = on;
+      applyTempo();
+      return true;
+    }
+    // 部分的失敗 → 状態を巻き戻し、audio 経路で副作用があれば再構築
+    state.masterTempo = previous;
+    if (state.sourceNode) rebuildGraph();
+    applyTempo();
+    return false;
   }
 
   // ============================================================
@@ -948,8 +984,8 @@
     });
 
     detectBtn.addEventListener('click', async () => {
-      // discogs（YouTube iframe）: cross-origin iframe の音は親で拾えないため AUTO 不可
-      if (USES_IFRAME_BRIDGE) {
+      // YouTube iframe しか再生対象が無い場合: cross-origin iframe の音は親で拾えないため AUTO 不可
+      if (!state.activeElement && state.bridgeIframes.size > 0 && !USES_PAGE_INJECT) {
         statusEl.textContent = 'AUTO unavailable for embedded players — use TAP';
         return;
       }
@@ -1129,12 +1165,13 @@
   function init() {
     console.log('[TEMPO Slider] content.js init, SITE=', SITE, 'host=', location.hostname);
     injectPanel();
-    if (USES_IFRAME_BRIDGE) {
-      // discogs 等：YouTube iframe を追跡し、postMessage で制御
-      watchYoutubeIframes();
-    } else {
-      watchAudioChanges();
-    }
+    // audio と YouTube iframe の両方を監視
+    // （custom サイトで両方が混在するページに対応するため）
+    // - bandcamp/beatport/traxsource: ほぼ audio のみ → iframe 監視は no-op
+    // - discogs: ほぼ iframe のみ → audio 監視は no-op
+    // - custom: 両方の可能性あり
+    watchAudioChanges();
+    watchBridgeIframes();
     // page-inject へ worklet URL を渡しておく（カスタムサイトを含めて
     // MASTER TEMPO 経路で worklet が必要になった時のため）
     postToPage('init', { workletUrl: ext.runtime.getURL('rubberband-worklet.js') });

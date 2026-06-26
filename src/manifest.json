@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TEMPO Slider",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "CDJ-style tempo / pitch keep / BPM controls for music playing in your browser.",
   "permissions": [
     "activeTab",
@@ -54,6 +54,15 @@
         "https://*.youtube-nocookie.com/*"
       ],
       "js": ["youtube-bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://bandcamp.com/EmbeddedPlayer/*",
+        "https://*.bandcamp.com/EmbeddedPlayer/*"
+      ],
+      "js": ["bandcamp-bridge.js"],
       "run_at": "document_idle",
       "all_frames": true
     }

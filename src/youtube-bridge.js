@@ -12,14 +12,16 @@
   const ext = (typeof browser !== 'undefined') ? browser : chrome;
   const MSG_TAG = '__tempoSliderBridge';
 
-  // 親フレームの許可オリジン判定（discogs.com 配下の任意サブドメインを許可）
+  // 親フレームの許可オリジン判定。
+  // postMessage はそもそも親フレーム（または同オリジン）からしか到達しないので、
+  // 任意の HTTPS オリジンを許可しても外部からの不正操作は構造上できない
+  // （リスクは「自分の埋め込み YouTube の再生速度を変えられる」程度で副作用なし）。
+  // discogs / custom サイトの未知のホスト両方に対応するため広く許可する。
   function isAllowedParentOrigin(origin) {
     if (!origin) return false;
     try {
       const u = new URL(origin);
-      if (u.protocol !== 'https:') return false;
-      const h = u.hostname;
-      return h === 'discogs.com' || h.endsWith('.discogs.com');
+      return u.protocol === 'https:';
     } catch {
       return false;
     }

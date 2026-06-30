@@ -45,7 +45,7 @@
   <g transform="translate(244, 100)">
     <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="32" font-weight="700" fill="#ffffff" letter-spacing="0.5">TEMPO</text>
     <text x="0" y="38" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="32" font-weight="700" fill="#ffffff" letter-spacing="0.5">Slider</text>
-    <text x="0" y="78" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" fill="#a0a0a8">CDJ-style tempo controls</text>
-    <text x="0" y="96" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" fill="#a0a0a8">for DJ music purchase sites</text>
+    <text x="0" y="78" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" fill="#a0a0a8">CDJ-style tempo control</text>
+    <text x="0" y="96" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" fill="#a0a0a8">for YouTube, Bandcamp &amp; more</text>
   </g>
 </svg>

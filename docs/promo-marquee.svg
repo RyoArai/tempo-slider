@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 560" width="1400" height="560">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a1d"/>
+      <stop offset="100%" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <linearGradient id="iconBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22222a"/>
+      <stop offset="100%" stop-color="#0f0f15"/>
+    </linearGradient>
+    <linearGradient id="thumbGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a0a0a8"/>
+      <stop offset="100%" stop-color="#3e3e44"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1400" height="560" fill="url(#bg)"/>
+
+  <!-- 左: アイコン (フェーダー風、大きめ) -->
+  <g transform="translate(140, 100)">
+    <rect width="360" height="360" rx="56" fill="url(#iconBg)" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+    <!-- 目盛り -->
+    <g fill="rgba(255,255,255,0.35)">
+      <rect x="108" y="44" width="144" height="4"/>
+      <rect x="108" y="76" width="144" height="4"/>
+      <rect x="108" y="108" width="144" height="4"/>
+      <rect x="108" y="140" width="144" height="4"/>
+      <rect x="108" y="172" width="144" height="4"/>
+      <rect x="108" y="204" width="144" height="4"/>
+      <rect x="108" y="236" width="144" height="4"/>
+      <rect x="108" y="268" width="144" height="4"/>
+      <rect x="108" y="300" width="144" height="4"/>
+    </g>
+    <!-- 緑LED -->
+    <rect x="96" y="172" width="16" height="12" rx="2" fill="#50ff80"/>
+    <!-- レール -->
+    <rect x="172" y="44" width="16" height="272" rx="8" fill="rgba(255,255,255,0.18)"/>
+    <!-- Thumb -->
+    <rect x="128" y="216" width="104" height="28" rx="6" fill="url(#thumbGrad)" stroke="rgba(255,255,255,0.5)" stroke-width="3"/>
+    <rect x="140" y="228" width="80" height="4" fill="rgba(0,0,0,0.4)"/>
+  </g>
+
+  <!-- 右: テキスト -->
+  <g transform="translate(580, 180)">
+    <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="88" font-weight="700" fill="#ffffff" letter-spacing="1">TEMPO Slider</text>
+    <text x="0" y="64" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="28" fill="#cccccc">DJ pitch fader for YouTube, Bandcamp,</text>
+    <text x="0" y="100" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="28" fill="#cccccc">Discogs, Beatport &amp; Traxsource.</text>
+    <text x="0" y="180" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="22" fill="#7fd6ff" font-weight="500">Free · No account · Open source</text>
+  </g>
+</svg>

@@ -131,7 +131,11 @@ async function addDnrRulesForSite(hostname) {
           { header: 'access-control-allow-origin', operation: 'set', value: '*' },
         ],
       },
-      condition: { urlFilter: `||${hostname}/`, resourceTypes: ['media', 'xmlhttprequest', 'other'] },
+      // CORS ヘッダー付与は <audio> の crossOrigin="anonymous" 経由再生のためだけに
+      // 必要。xmlhttprequest や other に "*" を適用すると認証付き XHR の応答が
+      // ブラウザに弾かれる（YouTube Studio のアップロード 0% 停止や Bandcamp の
+      // ダウンロード生成失敗と同根のバグ）。静的 rules.json と同じく media のみ。
+      condition: { urlFilter: `||${hostname}/`, resourceTypes: ['media'] },
     },
   ];
   await chrome.declarativeNetRequest.updateDynamicRules({ addRules: rules });
@@ -214,7 +218,12 @@ async function restoreCustomSites() {
     const granted = await chrome.permissions.contains({ origins });
     if (granted) {
       await registerScriptsForSite(site);
-      // DNR の動的ルールはブラウザ再起動を超えて永続するので再追加不要
+      // 動的 DNR ルールはブラウザ再起動を跨いで永続するが、過去バージョンで
+      // resourceTypes が広すぎたパターンが残っていると認証付き XHR を壊す。
+      // 起動毎に最新の定義で再登録して古いパターンを上書きする。
+      try { await addDnrRulesForSite(site); } catch (e) {
+        console.warn('[TEMPO Slider BG] DNR re-register failed for', site, ':', e);
+      }
     } else {
       // 許可が剥奪されていたらクリーンアップ
       await unregisterScriptsForSite(site);

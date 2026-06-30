@@ -118,6 +118,10 @@ async function refreshCurrentSiteButton() {
   } else if (customSites.includes(root)) {
     btn.disabled = true;
     btn.textContent = 'Already added';
+  } else if (isReservedHostname(root)) {
+    btn.disabled = true;
+    btn.textContent = 'Not addable (reserved)';
+    btn.title = `${root} is reserved (built-in or infrastructure). Adding it would break credentialed requests on related Google / CDN endpoints.`;
   } else {
     btn.disabled = false;
     btn.textContent = `+ Add ${root}`;
@@ -185,7 +189,12 @@ async function addSite(hostname, tabId) {
       try { await ext.tabs.reload(tabId); } catch (e) {}
     }
   } else {
-    setStatus(`Failed: ${res && res.error ? res.error : 'unknown'}`, true);
+    const err = res && res.error;
+    if (err === 'reserved_hostname') {
+      setStatus(`${hostname} is reserved (built-in or infrastructure) — cannot add.`, true);
+    } else {
+      setStatus(`Failed: ${err || 'unknown'}`, true);
+    }
   }
   await refresh();
 }

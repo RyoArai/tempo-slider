@@ -5,6 +5,11 @@
 //   - CSP 除去 / CORS 付与の declarativeNetRequest 動的ルール
 //   - chrome.storage.local への永続化（拡張機能の再起動後も復元）
 
+// 予約済みホスト名（追加禁止）の判定関数を読み込む。
+// Chrome MV3 service worker は importScripts、Firefox MV3 event page は
+// manifest の background.scripts で同等の効果になる。
+try { importScripts('reserved-hostnames.js'); } catch (e) { /* Firefox では scripts 配列で読み込まれているので無視 */ }
+
 const STORAGE_KEY = 'customSites';
 const DISABLED_BUILTINS_KEY = 'disabledBuiltins';
 const DNR_RULE_ID_START = 1000;
@@ -147,6 +152,12 @@ async function addCustomSite(hostname) {
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
     return { ok: false, error: 'invalid_hostname' };
   }
+  // 予約済みホスト名は追加しない。
+  // 組み込み対応サイトや Google/CDN インフラに動的 DNR ルールが乗ると、
+  // 認証付き CORS リクエスト（YouTube Studio アップロード等）が壊れる。
+  if (typeof isReservedHostname === 'function' && isReservedHostname(hostname)) {
+    return { ok: false, error: 'reserved_hostname' };
+  }
   const origins = originPatternsFor(hostname);
   const granted = await chrome.permissions.contains({ origins });
   if (!granted) return { ok: false, error: 'permission_not_granted' };
@@ -179,7 +190,25 @@ async function removeCustomSite(hostname) {
 
 // ---------- 起動時に復元 ----------
 async function restoreCustomSites() {
-  const sites = await loadCustomSites();
+  let sites = await loadCustomSites();
+
+  // 過去のバージョンで追加されてしまった予約済みホスト名を自動削除する。
+  // youtube.com / google.com 等を customSites に持っているとアップロード
+  // 等の認証付き CORS リクエストが壊れるため、検出次第クリーンアップする。
+  if (typeof isReservedHostname === 'function') {
+    const reservedFound = sites.filter(s => isReservedHostname(s));
+    if (reservedFound.length > 0) {
+      console.warn('[TEMPO Slider BG] Removing reserved hostnames from customSites:', reservedFound);
+      for (const site of reservedFound) {
+        await unregisterScriptsForSite(site);
+        await removeDnrRulesForSite(site);
+        try { await chrome.permissions.remove({ origins: originPatternsFor(site) }); } catch (e) {}
+      }
+      sites = sites.filter(s => !isReservedHostname(s));
+      await saveCustomSites(sites);
+    }
+  }
+
   for (const site of sites) {
     const origins = originPatternsFor(site);
     const granted = await chrome.permissions.contains({ origins });
